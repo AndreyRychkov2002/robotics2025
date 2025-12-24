@@ -1,6 +1,7 @@
 import pybullet as p
 import numpy as np
 import time
+import matplotlib.pyplot as plt
 
 # Параметры задачи (здесь все взято аналогично прошлой задаче)
 T = 5.0
@@ -17,6 +18,17 @@ robotId = p.loadURDF("./two_link.urdf.xml", useFixedBase=True)
 # Отключаем моторы для torque control
 for i in jIdx:
     p.setJointMotorControl2(robotId, i, p.VELOCITY_CONTROL, force=0)
+
+history = {
+    't': [],
+    'theta_real': [], 'theta_ref': [],
+    'vel_real': [], 'vel_ref': []
+}
+"""Словарь для логирования: t - момент времени
+                            theta_real - текущие значения параметров theta
+                            theta_ref - следющие (желаемые для управления на каждом шаге) значения параметров theta
+                            vel_real - текущие обобщенные скорости
+                            vel_ref - следющие (желаемые для управления на каждом шаге) обобщенные скорости"""
 
 # Начальное положение
 for i, val in enumerate(th_start):
@@ -87,7 +99,41 @@ for step in range(int(T / dt) + 100):
     tau = M @ u + h
     
     p.setJointMotorControlArray(robotId, jIdx, p.TORQUE_CONTROL, forces=tau)
+
+    # Логирование
+    history['t'].append(curr_t)
+    history['theta_real'].append(theta)
+    history['theta_ref'].append(theta_d)
+    history['vel_real'].append(theta_dot)
+    history['vel_ref'].append(theta_dot_d)
+
     p.stepSimulation()
     time.sleep(dt)
 
 p.disconnect()
+
+history['theta_real'] = np.array(history['theta_real'])
+history['theta_ref'] = np.array(history['theta_ref'])
+history['vel_real'] = np.array(history['vel_real'])
+history['vel_ref'] = np.array(history['vel_ref'])
+
+fig, axs = plt.subplots(2, 2, figsize=(12, 8))
+fig.suptitle('Joint Trajectories (Trapezoidal Profile Scaling)', fontsize=16)
+
+for i in range(2):
+    # Позиция
+    axs[0, i].plot(history['t'], history['theta_ref'][:, i], 'r--', label='Reference')
+    axs[0, i].plot(history['t'], history['theta_real'][:, i], 'b', label='Actual', alpha=0.7)
+    axs[0, i].set_title(f'Joint {i+1} Position [rad]')
+    axs[0, i].legend()
+    axs[0, i].grid(True)
+
+    # Скорость
+    axs[1, i].plot(history['t'], history['vel_ref'][:, i], 'r--', label='Reference')
+    axs[1, i].plot(history['t'], history['vel_real'][:, i], 'g', label='Actual', alpha=0.7)
+    axs[1, i].set_title(f'Joint {i+1} Velocity [rad/s]')
+    axs[1, i].legend()
+    axs[1, i].grid(True)
+
+plt.tight_layout()
+plt.show()

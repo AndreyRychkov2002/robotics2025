@@ -1,6 +1,7 @@
 import pybullet as p
 import numpy as np
 import time
+import matplotlib.pyplot as plt
 
 # Параметры симуляции и задачи
 dt = 1/240
@@ -13,6 +14,17 @@ physicsClient = p.connect(p.GUI)
 p.configureDebugVisualizer(p.COV_ENABLE_GUI, 0) # Чтобы отключить отображение графических элементов (оси, сетки, etc)
 p.setGravity(0, 0, -10)
 boxId = p.loadURDF("./two_link.urdf.xml", useFixedBase=True)
+
+history = {
+    't': [],
+    'theta_real': [], 'theta_ref': [],
+    'vel_real': [], 'vel_ref': []
+}
+"""Словарь для логирования: t - момент времени
+                            theta_real - текущие значения параметров theta
+                            theta_ref - следющие (желаемые для управления на каждом шаге) значения параметров theta
+                            vel_real - текущие обобщенные скорости
+                            vel_ref - следющие (желаемые для управления на каждом шаге) обобщенные скорости"""
 
 # Отключаем встроенные моторы для прямого управления моментами
 for i in jIdx:
@@ -65,7 +77,40 @@ for step in range(int(T / dt) + 100): # + небольшое время на с�
     # 4. Применение моментов к joint'ам
     p.setJointMotorControlArray(bodyIndex=boxId, jointIndices=jIdx, controlMode=p.TORQUE_CONTROL, forces=tau)
     
+    # Логирование
+    history['t'].append(curr_t)
+    history['theta_real'].append(theta)
+    history['theta_ref'].append(theta_d)
+    history['vel_real'].append(theta_dot)
+    history['vel_ref'].append(theta_dot_d)
+
     p.stepSimulation()
     time.sleep(dt)
 
 p.disconnect()
+
+history['theta_real'] = np.array(history['theta_real'])
+history['theta_ref'] = np.array(history['theta_ref'])
+history['vel_real'] = np.array(history['vel_real'])
+history['vel_ref'] = np.array(history['vel_ref'])
+
+fig, axs = plt.subplots(2, 2, figsize=(12, 8))
+fig.suptitle('Joint Trajectories (Quintic Polynomial Scaling)', fontsize=16)
+
+for i in range(2):
+    # Позиция
+    axs[0, i].plot(history['t'], history['theta_ref'][:, i], 'r--', label='Reference')
+    axs[0, i].plot(history['t'], history['theta_real'][:, i], 'b', label='Actual', alpha=0.7)
+    axs[0, i].set_title(f'Joint {i+1} Position [rad]')
+    axs[0, i].legend()
+    axs[0, i].grid(True)
+
+    # Скорость
+    axs[1, i].plot(history['t'], history['vel_ref'][:, i], 'r--', label='Reference')
+    axs[1, i].plot(history['t'], history['vel_real'][:, i], 'g', label='Actual', alpha=0.7)
+    axs[1, i].set_title(f'Joint {i+1} Velocity [rad/s]')
+    axs[1, i].legend()
+    axs[1, i].grid(True)
+
+plt.tight_layout()
+plt.show()
